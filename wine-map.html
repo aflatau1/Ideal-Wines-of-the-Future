@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ideal Wines of the Future</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+  :root{
+    --bg:#140d10; --panel:#1f1318; --wine:#7b2233; --gold:#d9a441;
+    --text:#f3e7d8; --muted:#a98d77; --border:#3a2229;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{font-family:"Georgia",serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;height:100vh;overflow:hidden}
+  header{padding:14px 18px;border-bottom:1px solid var(--border);
+    background:linear-gradient(180deg,#2a151c,#140d10);display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+  header h1{font-size:1.3rem;letter-spacing:1px;color:var(--gold);white-space:nowrap}
+  .time{display:flex;align-items:center;gap:12px;flex:1;min-width:280px}
+  .time #year{color:var(--gold);font-size:1.5rem;font-weight:bold;min-width:60px;text-align:center}
+  .time input[type=range]{flex:1;accent-color:var(--wine);cursor:pointer}
+  button{font-family:inherit;background:var(--wine);color:#fff;border:none;
+    padding:8px 14px;border-radius:6px;cursor:pointer;font-size:.9rem}
+  button:hover{background:#9c2c40}
+  .scenario{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:.85rem}
+  select{font-family:inherit;background:var(--panel);color:var(--text);border:1px solid var(--border);padding:6px 8px;border-radius:6px}
+  .main{flex:1;display:flex;overflow:hidden}
+  #map{flex:1;background:#0a0a0a}
+  .side{width:340px;background:var(--panel);border-left:1px solid var(--border);
+    overflow-y:auto;padding:18px}
+  .side h2{color:var(--gold);font-size:1.25rem;margin-bottom:2px}
+  .side .country{color:var(--muted);font-style:italic;margin-bottom:12px}
+  .empty{color:var(--muted);font-style:italic;text-align:center;margin-top:40px;line-height:1.6}
+  .tag{display:inline-block;background:var(--wine);color:#fff;font-family:sans-serif;
+    font-size:.7rem;padding:3px 9px;border-radius:20px;margin:0 5px 5px 0}
+  .risks{margin:8px 0 4px}
+  .risk{display:inline-block;background:#2a1a20;color:#c9a59a;font-family:sans-serif;
+    font-size:.68rem;padding:2px 7px;border-radius:4px;margin:0 4px 4px 0;border:1px solid var(--border)}
+  .adapt{margin:12px 0;padding:10px 12px;background:rgba(46,158,91,.08);
+    border-left:3px solid #2e9e5b;font-size:.85rem;line-height:1.5;border-radius:0 4px 4px 0}
+  .adapt b{color:#6cc28a;font-family:sans-serif;font-size:.7rem;text-transform:uppercase;
+    letter-spacing:1px;display:block;margin-bottom:4px;font-weight:normal}
+  .desc{margin:12px 0;line-height:1.55;font-size:.92rem}
+  .score-box{display:flex;align-items:baseline;gap:8px;margin:14px 0 6px}
+  .score-num{font-size:2.2rem;font-weight:bold}
+  .score-lbl{color:var(--muted);font-size:.85rem}
+  .trend{font-family:sans-serif;font-size:.8rem;padding:3px 8px;border-radius:6px;display:inline-block;margin-bottom:10px}
+  .stat{display:flex;justify-content:space-between;border-top:1px solid var(--border);padding:7px 0;font-size:.88rem}
+  .stat span:first-child{color:var(--muted)}
+  .spark{margin:14px 0 6px}
+  .spark-cap{color:var(--muted);font-size:.78rem;font-family:sans-serif;margin-bottom:4px}
+  .lists h3{color:var(--gold);font-size:.95rem;margin:18px 0 6px;font-family:sans-serif;text-transform:uppercase;letter-spacing:1px}
+  .li{display:flex;justify-content:space-between;padding:5px 0;font-size:.86rem;border-bottom:1px dotted var(--border);cursor:pointer}
+  .li:hover{color:var(--gold)}
+  .li .v{font-family:sans-serif;font-weight:bold}
+  .legend{position:absolute;bottom:14px;left:14px;z-index:1000;background:rgba(31,19,24,.92);
+    border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:.78rem;font-family:sans-serif}
+  .legend .row{display:flex;align-items:center;gap:7px;margin:3px 0}
+  .legend i{width:13px;height:13px;border-radius:50%;display:inline-block;border:1px solid #fff}
+  .leaflet-popup-content-wrapper,.leaflet-popup-tip{background:#2a151c;color:var(--text)}
+  .leaflet-popup-content{font-family:Georgia,serif}
+  .leaflet-popup-content b{color:var(--gold)}
+</style>
+</head>
+<body>
+<header>
+  <h1>&#127863; Ideal Wines of the Future</h1>
+  <div class="time">
+    <button id="play">&#9658; Play</button>
+    <input type="range" id="slider" min="1980" max="2080" step="5" value="2025">
+    <span id="year">2025</span>
+  </div>
+  <div class="scenario">
+    Scenario:
+    <select id="scenario">
+      <option value="0.2">Paris goal (+1.5&deg;C vs. pre-industrial)</option>
+      <option value="1.4" selected>Current policies (+2.7&deg;C)</option>
+      <option value="3.1">High emissions, SSP5-8.5 (+4.4&deg;C)</option>
+    </select>
+  </div>
+</header>
+
+<div class="main">
+  <div id="map">
+    <div class="legend">
+      <div class="row"><i style="background:#2e9e5b"></i> Ideal (75&ndash;100)</div>
+      <div class="row"><i style="background:#d9a441"></i> Good (50&ndash;75)</div>
+      <div class="row"><i style="background:#d9722e"></i> Marginal (25&ndash;50)</div>
+      <div class="row"><i style="background:#b03a4e"></i> Stressed (&lt;25)</div>
+      <div class="row" style="margin-top:6px;color:#a98d77">Circle size = suitability</div>
+      <div class="row" style="margin-top:4px;color:#a98d77;display:block">
+        <span style="display:inline-block;width:13px;height:13px;border-radius:50%;border:1.5px solid #fff;vertical-align:middle"></span> measured GST
+        &nbsp; <span style="display:inline-block;width:13px;height:13px;border-radius:50%;border:1.2px dashed #fff;vertical-align:middle"></span> estimated
+      </div>
+      <div class="row" style="margin-top:8px;color:#7d6452;font-size:.68rem;font-style:italic;max-width:230px;line-height:1.4;display:block">
+        Zoom in to reveal sub-regions &amp; crus. Thermal score only — drought, smoke, frost &amp; disease appear as per-region risk tags.
+      </div>
+    </div>
+  </div>
+  <div class="side">
+    <div id="empty" class="empty">
+      Drag the timeline or press <b>Play</b><br>to watch wine regions rise &amp; fall<br>under climate change.<br><br>Click any region for detail.
+    </div>
+    <div id="detail" style="display:none">
+      <h2 id="d-name"></h2>
+      <div class="country" id="d-country"></div>
+      <div class="score-box">
+        <span class="score-num" id="d-score"></span>
+        <span class="score-lbl">/ 100 climate suitability</span>
+      </div>
+      <span class="trend" id="d-trend"></span>
+      <div id="d-grapes"></div>
+      <div class="risks" id="d-risks"></div>
+      <p class="desc" id="d-desc"></p>
+      <div class="adapt" id="d-adapt"></div>
+      <div class="spark">
+        <div class="spark-cap">Suitability 1980 &rarr; 2080</div>
+        <svg id="d-spark" width="300" height="70" viewBox="0 0 300 70"></svg>
+      </div>
+      <div class="stat"><span>Growing-season temp</span><span id="d-gst"></span></div>
+      <div class="stat"><span>Optimal for grapes</span><span id="d-opt"></span></div>
+      <div class="stat"><span>Outlook this century</span><span id="d-out"></span></div>
+    </div>
+    <div class="lists">
+      <h3>&#9650; Rising stars <span id="ystar" style="color:var(--muted);font-weight:normal"></span></h3>
+      <div id="risers"></div>
+      <h3>&#9660; At risk</h3>
+      <div id="fallers"></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+/* Each region: GST2020 = mean growing-season temp (°C, Apr–Oct N / Oct–Apr S) ~2020.
+   optimal = ideal GST for its signature grapes (Jones viticulture climate groups).
+   sens = local warming sensitivity multiplier (high latitude & continental warm faster).
+   tier = 1 world-flagship (visible all zooms), 2 country-major (zoom 4+), 3 sub-AVA/cru (zoom 6+).
+   est = true when GST is interpolated/estimated from neighbours rather than published. */
+const regions = [
+  // ===== FRANCE =====
+  {name:"Bordeaux",country:"France",lat:44.84,lng:-0.58,gst2020:17.6,optimal:17.5,sens:1.05,tier:1,est:false,
+   grapes:["Cabernet Sauvignon","Merlot"],risks:["heatwave","late frost"],
+   desc:"Classic maritime benchmark. Warming ripens Cabernet more reliably, but heat spikes threaten freshness and Merlot first.",
+   adapt:"AOC now permits Touriga Nacional, Marselan, Arinarnoa and other heat-tolerant grapes — adaptation already underway."},
+  {name:"Burgundy",country:"France",lat:47.05,lng:4.84,gst2020:16.4,optimal:15.5,sens:1.1,tier:1,est:false,
+   grapes:["Pinot Noir","Chardonnay"],risks:["heatwave","loss of acidity"],
+   desc:"Heat-sensitive Pinot Noir. Recent vintages are riper and richer — many producers say the optimum has already passed.",
+   adapt:"Hautes-Côtes and higher-elevation parcels gain importance. Aligoté returns to favour; harvest is now weeks earlier than 1990."},
+  {name:"Champagne",country:"France",lat:49.05,lng:3.95,gst2020:15.5,optimal:15.0,sens:1.15,tier:1,est:false,
+   grapes:["Chardonnay","Pinot Noir"],risks:["loss of acidity","budbreak frost"],
+   desc:"A textbook climate beneficiary so far — warming has lifted base-wine ripeness — but acid retention is the new worry.",
+   adapt:"Dosage trends lower; PIWI varieties under trial; still-wine pivots increasing. English sparkling is the geographic hedge."},
+  {name:"Alsace",country:"France",lat:48.1,lng:7.4,gst2020:16.2,optimal:15.5,sens:1.15,tier:1,est:true,
+   grapes:["Riesling","Gewürztraminer","Pinot Gris"],risks:["heatwave","loss of acidity"],
+   desc:"Sheltered by the Vosges, Alsace has long been one of France's driest spots. Warming pushes whites toward over-ripeness and lower acid.",
+   adapt:"Dry styles displacing semi-sweet; producers experiment with later-ripening Pinot Noir as a serious red category."},
+  {name:"Northern Rhône",country:"France",lat:45.1,lng:4.78,gst2020:17.4,optimal:17.0,sens:1.05,tier:1,est:true,
+   grapes:["Syrah","Viognier"],risks:["heatwave","drought"],
+   desc:"Steep granite slopes — Côte-Rôtie, Hermitage, Cornas, Condrieu. Syrah handles heat better than Pinot but flavour profile is shifting raisin-ward.",
+   adapt:"Higher slopes and shaded eastern exposures gain value. Co-fermenting Viognier in reds increasingly an aromatic-rescue tool."},
+  {name:"Southern Rhône",country:"France",lat:44.05,lng:4.83,gst2020:19.0,optimal:18.0,sens:1.05,tier:1,est:true,
+   grapes:["Grenache","Syrah","Mourvèdre"],risks:["heatwave","drought","wildfire"],
+   desc:"Châteauneuf-du-Pape and the wider Vallée — already hot and increasingly dry. Grenache, the keystone grape, sunburns at sustained 38°C+.",
+   adapt:"Old bush-vine Grenache, Mourvèdre and Counoise from heritage plantings prove most resilient. Late-budding whites gain share."},
+  {name:"Loire (Sancerre)",country:"France",lat:47.31,lng:2.83,gst2020:16.0,optimal:15.4,sens:1.1,tier:1,est:false,
+   grapes:["Sauvignon Blanc","Pinot Noir"],risks:["aromatic loss","spring frost"],
+   desc:"Cool-climate Sauvignon Blanc heartland — already losing some of its signature methoxypyrazine zip in warm vintages.",
+   adapt:"Earlier picking and northern-facing slopes help. Long-term aromatic style may shift toward riper, fruitier expression."},
+  {name:"Beaujolais",country:"France",lat:46.0,lng:4.7,gst2020:17.0,optimal:16.5,sens:1.1,tier:2,est:true,
+   grapes:["Gamay"],risks:["heatwave","sunburn"],
+   desc:"Granite hills south of Burgundy. Gamay is heat-tolerant relative to Pinot, but the recent run of hot vintages already shows alcohol creep.",
+   adapt:"Higher-altitude crus (Chiroubles, Côte de Brouilly) increasingly valuable. Carbonic-maceration tradition keeps freshness viable."},
+  {name:"Provence (Bandol)",country:"France",lat:43.13,lng:5.74,gst2020:19.5,optimal:18.5,sens:1.0,tier:2,est:true,
+   grapes:["Mourvèdre","Cinsault","Grenache"],risks:["wildfire","drought","heatwave"],
+   desc:"Sun-baked Mediterranean coast. Mourvèdre is one of the most heat-tolerant noble grapes — Bandol may age better than most warm regions.",
+   adapt:"Rosé production continues to dominate. Provence-wide, breeders develop drought-tolerant rootstocks for the wider region."},
+  {name:"Languedoc",country:"France",lat:43.4,lng:3.2,gst2020:19.2,optimal:18.3,sens:1.05,tier:2,est:true,
+   grapes:["Syrah","Grenache","Carignan"],risks:["drought","heatwave","wildfire"],
+   desc:"Vast warm-climate region from the Pyrenees to the Rhône. Old-vine Carignan and Grenache offer real adaptive headroom.",
+   adapt:"Pic St-Loup and limestone hills are the cool refuges. Mediterranean and even southern Italian grape trials expanding."},
+  {name:"Jura",country:"France",lat:46.85,lng:5.65,gst2020:15.8,optimal:15.3,sens:1.15,tier:2,est:true,
+   grapes:["Savagnin","Poulsard","Trousseau"],risks:["loss of acidity","spring frost"],
+   desc:"Cool, foothill region celebrated for oxidative whites and oddball reds. Warming is welcome — for now.",
+   adapt:"Indigenous varieties (Savagnin, Trousseau) suited to changing conditions; producers experiment with cooler northern slopes."},
+
+  // Bordeaux sub-regions (tier 3)
+  {name:"Médoc",region:"Bordeaux",country:"France",lat:45.25,lng:-0.85,gst2020:17.5,optimal:17.5,sens:1.05,tier:3,est:true,
+   grapes:["Cabernet Sauvignon"],risks:["heatwave","late frost"],
+   desc:"Cabernet's Left Bank gravel banks. Warming improves ripening but increases the gap between great and weak vintages.",
+   adapt:"Earlier harvests; reserved-blend Petit Verdot and Carmenère regaining importance."},
+  {name:"Saint-Émilion",region:"Bordeaux",country:"France",lat:44.89,lng:-0.16,gst2020:17.7,optimal:17.0,sens:1.05,tier:3,est:true,
+   grapes:["Merlot","Cabernet Franc"],risks:["heatwave","drought"],
+   desc:"Right Bank limestone-clay plateau. Merlot's early-ripening habit makes it the most heat-stressed of the noble grapes.",
+   adapt:"Cabernet Franc share rising in many blends; heat-tolerant Touriga and Marselan trials underway."},
+  {name:"Pomerol",region:"Bordeaux",country:"France",lat:44.93,lng:-0.21,gst2020:17.7,optimal:17.0,sens:1.05,tier:3,est:true,
+   grapes:["Merlot"],risks:["heatwave","drought"],
+   desc:"Tiny clay-rich plateau. Iron-rich crasse-de-fer subsoil moderates summer heat, but Merlot's heat sensitivity is the central risk.",
+   adapt:"Earlier picks, cover crops to retain soil moisture, careful canopy management."},
+  {name:"Pessac-Léognan",region:"Bordeaux",country:"France",lat:44.78,lng:-0.6,gst2020:17.6,optimal:17.5,sens:1.05,tier:3,est:true,
+   grapes:["Cabernet Sauvignon","Sémillon"],risks:["heatwave","loss of acidity"],
+   desc:"Cabernet-led reds and serious oak-aged Sémillon/Sauvignon whites. The white category is increasingly at risk first.",
+   adapt:"Cooler clones, earlier white picks, possible move toward more Sémillon vs. Sauvignon as aromatics fade."},
+  {name:"Sauternes",region:"Bordeaux",country:"France",lat:44.53,lng:-0.34,gst2020:17.9,optimal:17.5,sens:1.05,tier:3,est:true,
+   grapes:["Sémillon","Sauvignon Blanc"],risks:["botrytis timing","autumn rain"],
+   desc:"Sweet wine production depends on autumn fog from the Ciron — and the cold-river/warm-river effect is destabilizing.",
+   adapt:"Dry whites (Sauvignon, Sémillon) are an increasing share of estate output; sweet vintage success becomes less reliable."},
+
+  // Burgundy sub-regions (tier 3)
+  {name:"Chablis",region:"Burgundy",country:"France",lat:47.81,lng:3.8,gst2020:15.5,optimal:14.8,sens:1.15,tier:3,est:true,
+   grapes:["Chardonnay"],risks:["spring frost","loss of acidity"],
+   desc:"Northern outpost on Kimmeridgian limestone. Frost is the recurring nightmare; warming is mostly welcome for ripeness.",
+   adapt:"Anti-frost infrastructure (candles, sprinklers, wind machines) now standard. Earlier picks preserve flinty character."},
+  {name:"Côte de Nuits",region:"Burgundy",country:"France",lat:47.18,lng:4.96,gst2020:16.4,optimal:15.5,sens:1.1,tier:3,est:true,
+   grapes:["Pinot Noir"],risks:["heatwave","loss of acidity"],
+   desc:"Grand cru heartland — Vosne-Romanée, Gevrey-Chambertin, Vougeot. Pinot's finesse window narrows with each warm decade.",
+   adapt:"Higher slopes and shaded northern aspects gain value; earlier harvests now standard."},
+  {name:"Côte de Beaune",region:"Burgundy",country:"France",lat:46.94,lng:4.85,gst2020:16.5,optimal:15.7,sens:1.1,tier:3,est:true,
+   grapes:["Chardonnay","Pinot Noir"],risks:["heatwave","hail"],
+   desc:"Source of the world's most coveted Chardonnay (Montrachet, Meursault). Warming boosts richness but threatens nervy minerality.",
+   adapt:"Hautes-Côtes parcels and earlier picks; Aligoté revival is increasingly serious not nostalgic."},
+
+  // ===== ITALY =====
+  {name:"Piemonte",country:"Italy",lat:44.7,lng:8.0,gst2020:17.8,optimal:16.8,sens:1.05,tier:1,est:false,
+   grapes:["Nebbiolo","Barbera"],risks:["heatwave","drought"],
+   desc:"Nebbiolo is among the most heat-sensitive noble grapes — Barolo's perfume is at real risk by mid-century.",
+   adapt:"Higher Langhe sites and north-facing exposures gain value. Alto Piemonte (Gattinara, Ghemme) becomes increasingly relevant."},
+  {name:"Tuscany",country:"Italy",lat:43.4,lng:11.3,gst2020:18.6,optimal:18.0,sens:1.05,tier:1,est:false,
+   grapes:["Sangiovese"],risks:["heatwave","drought","hail"],
+   desc:"Already warm. Sangiovese still thrives but drought and heat spikes push growers to higher-altitude Chianti Rufina and Montalcino slopes.",
+   adapt:"Altitude (400–600 m) is the chief refuge. International varieties (Cabernet, Merlot) may decline before Sangiovese does."},
+  {name:"Veneto (Valpolicella)",country:"Italy",lat:45.5,lng:10.95,gst2020:18.2,optimal:17.5,sens:1.05,tier:1,est:true,
+   grapes:["Corvina","Rondinella"],risks:["heatwave","hail"],
+   desc:"Home of Amarone (dried-grape concentration). Warming makes the appassimento process trickier — fruit reaches sugar targets in the vineyard.",
+   adapt:"Cooler Valpantena and higher Classica zones gain value. Producers re-evaluate appassimento duration as base-wine ripeness rises."},
+  {name:"Friuli-Venezia Giulia",country:"Italy",lat:46.0,lng:13.43,gst2020:17.8,optimal:16.8,sens:1.1,tier:2,est:true,
+   grapes:["Friulano","Ribolla Gialla","Pinot Grigio"],risks:["heatwave","hail"],
+   desc:"Italy's premier white-wine region. The white-grape category is increasingly heat-stressed — orange-wine producers are watching closely.",
+   adapt:"Cooler Collio and Carso sub-zones favoured; Schioppettino and other natives gain attention as climate hedges."},
+  {name:"Alto Adige",country:"Italy",lat:46.5,lng:11.35,gst2020:16.2,optimal:15.5,sens:1.15,tier:1,est:true,
+   grapes:["Pinot Grigio","Gewürztraminer","Lagrein"],risks:["heatwave at low elevation","hail"],
+   desc:"Vertically stratified Alpine wine zone — valley floor at 200 m vs. peaks above 1000 m. Warming pushes ideal sites uphill rapidly.",
+   adapt:"Producers planting at progressively higher elevations; Riesling and Sauvignon climbing into former pasture."},
+  {name:"Franciacorta",country:"Italy",lat:45.55,lng:9.97,gst2020:16.8,optimal:15.5,sens:1.1,tier:2,est:true,
+   grapes:["Chardonnay","Pinot Nero"],risks:["heatwave","loss of acidity"],
+   desc:"Italy's leading traditional-method sparkling region, beside Lake Iseo. Acid retention is the central concern as base wines ripen earlier.",
+   adapt:"Dosage trends lower; reserve wine programs lengthen; producers explore higher-elevation vineyards."},
+  {name:"Etna",country:"Italy",lat:37.75,lng:15.0,gst2020:16.5,optimal:16.0,sens:1.1,tier:1,est:true,
+   grapes:["Nerello Mascalese","Carricante"],risks:["volcanic activity","heatwave at low elevation"],
+   desc:"High-altitude volcanic vineyards (600–1100 m) on Sicily's active volcano. Elevation buffers Mediterranean heat — for now.",
+   adapt:"Plantings climbing higher on the volcano's slopes; northern face increasingly desirable as the southern flank warms."},
+  {name:"Campania (Taurasi)",country:"Italy",lat:40.97,lng:14.97,gst2020:18.0,optimal:17.5,sens:1.05,tier:2,est:true,
+   grapes:["Aglianico","Fiano","Greco"],risks:["heatwave","drought"],
+   desc:"Volcanic Avellino hills. Aglianico's late ripening makes it surprisingly resilient — it has been described as Mediterranean's most underrated grape.",
+   adapt:"Aglianico harvest already shifted to October; cooler high-altitude inland sites preserve structure and acidity."},
+
+  // Tuscany / Piemonte sub-regions (tier 3)
+  {name:"Chianti Classico",region:"Tuscany",country:"Italy",lat:43.5,lng:11.3,gst2020:18.3,optimal:17.8,sens:1.05,tier:3,est:true,
+   grapes:["Sangiovese"],risks:["heatwave","drought","hail"],
+   desc:"The historic heart of Chianti between Florence and Siena. Already warm — Sangiovese's late budbreak and high acidity remain useful.",
+   adapt:"Gran Selezione tier emphasises single-vineyard terroirs at higher altitudes; cover crops and dry-farming techniques expand."},
+  {name:"Brunello di Montalcino",region:"Tuscany",country:"Italy",lat:43.05,lng:11.49,gst2020:18.5,optimal:18.0,sens:1.05,tier:3,est:true,
+   grapes:["Sangiovese Grosso"],risks:["heatwave","drought"],
+   desc:"South-facing Tuscan hill town. The combination of sea breezes from the coast and altitude buffers heat — but only just.",
+   adapt:"North-facing slopes and higher elevation sub-zones (1000 m) increasingly the prestige bet."},
+  {name:"Bolgheri",region:"Tuscany",country:"Italy",lat:43.23,lng:10.62,gst2020:18.8,optimal:18.0,sens:1.0,tier:3,est:true,
+   grapes:["Cabernet Sauvignon","Merlot"],risks:["heatwave","wildfire"],
+   desc:"Tuscan coast, Super-Tuscan country. Maritime moderation helps, but ripening is now reliably ahead of southern Bordeaux.",
+   adapt:"Some producers adding native Sangiovese and Mediterranean varieties to historically French-blend estates."},
+  {name:"Barolo",region:"Piemonte",country:"Italy",lat:44.6,lng:7.94,gst2020:17.7,optimal:16.5,sens:1.05,tier:3,est:true,
+   grapes:["Nebbiolo"],risks:["heatwave","hail"],
+   desc:"Nebbiolo's prestige cradle. Aromatic balance is the casualty of warming — the perfume of classic Barolo is harder to capture.",
+   adapt:"Higher-altitude communes (Serralunga, Monforte's higher slopes) gain prestige; harvest moved up nearly three weeks since 1990."},
+  {name:"Barbaresco",region:"Piemonte",country:"Italy",lat:44.72,lng:8.08,gst2020:17.6,optimal:16.5,sens:1.05,tier:3,est:true,
+   grapes:["Nebbiolo"],risks:["heatwave"],
+   desc:"Barolo's slightly cooler northern sibling. Earlier ripening site means warming hits sooner — but the river-moderated climate buffers extreme heat.",
+   adapt:"Single-vineyard MGA system encodes terroir granularity to navigate climate variability site-by-site."},
+
+  // ===== IBERIA =====
+  {name:"Rioja",country:"Spain",lat:42.45,lng:-2.45,gst2020:18.2,optimal:17.5,sens:1.1,tier:1,est:false,
+   grapes:["Tempranillo","Garnacha"],risks:["heatwave","water stress"],
+   desc:"Heat and water stress mounting. Producers shift uphill into Rioja Alta and Alavesa to preserve acidity and elegance.",
+   adapt:"Garnacha on cooler high-altitude sites; revival of forgotten white varieties (Maturana, Tempranillo Blanco)."},
+  {name:"Ribera del Duero",country:"Spain",lat:41.62,lng:-3.7,gst2020:18.0,optimal:17.5,sens:1.15,tier:1,est:true,
+   grapes:["Tempranillo"],risks:["spring frost","heatwave"],
+   desc:"High plateau (800–900 m) where dramatic diurnal swings preserve acidity. Spring frost remains the existential vintage risk.",
+   adapt:"Old-vine Tempranillo on north-facing slopes; biodynamic and dry-farming gain prominence."},
+  {name:"Priorat",country:"Spain",lat:41.18,lng:0.78,gst2020:19.4,optimal:18.5,sens:1.05,tier:1,est:true,
+   grapes:["Garnacha","Cariñena"],risks:["heatwave","drought","wildfire"],
+   desc:"Steep llicorella schist terraces, very low yields. Old vines and unique soils provide some climate buffer but absolute temperatures are extreme.",
+   adapt:"Site selection (north aspect, higher elevation) is everything; some replanting of historic white varieties."},
+  {name:"Rías Baixas",country:"Spain",lat:42.4,lng:-8.7,gst2020:17.2,optimal:16.0,sens:1.05,tier:1,est:true,
+   grapes:["Albariño"],risks:["fungal disease","autumn rain"],
+   desc:"Lush Atlantic Galicia. Warming is reducing the chronic disease pressure that has plagued Albariño growers — a current net positive.",
+   adapt:"Tightening canopy management; the long-term challenge is preserving Albariño's signature saline freshness as ripening accelerates."},
+  {name:"Jerez (Sherry)",country:"Spain",lat:36.69,lng:-6.14,gst2020:20.5,optimal:18.5,sens:1.0,tier:1,est:true,
+   grapes:["Palomino","Pedro Ximénez"],risks:["heatwave","drought"],
+   desc:"Albariza-soil heat sink near the Atlantic. The flor yeast's tolerance window narrows as cellar temperatures rise.",
+   adapt:"Investment in cellar climate control; revival of unfortified table-wine styles as the sherry market shrinks."},
+  {name:"Penedès",country:"Spain",lat:41.35,lng:1.7,gst2020:18.6,optimal:17.8,sens:1.05,tier:2,est:true,
+   grapes:["Macabeo","Xarel·lo","Parellada"],risks:["heatwave","drought"],
+   desc:"Cava's home turf, near Barcelona. Base wines for sparkling demand high acidity — increasingly hard at lower elevations.",
+   adapt:"Cava de Paraje Calificado (single-estate tier) emphasises high-altitude vineyards; producers diversify into still wine."},
+  {name:"Bierzo",country:"Spain",lat:42.5,lng:-6.6,gst2020:17.5,optimal:16.8,sens:1.1,tier:2,est:true,
+   grapes:["Mencía","Godello"],risks:["heatwave","autumn rain"],
+   desc:"Steep slate slopes in north-western Spain. Mencía is heat-sensitive but the region's altitude headroom is substantial.",
+   adapt:"Mountain-facing vineyards above 600 m; revival of old-vine plantings on the steepest slopes."},
+  {name:"Douro",country:"Portugal",lat:41.16,lng:-7.55,gst2020:20.2,optimal:18.5,sens:1.08,tier:1,est:false,
+   grapes:["Touriga Nacional","Tinta Roriz"],risks:["extreme heat","drought","wildfire"],
+   desc:"One of Europe's hottest fine-wine regions and already at the edge for balanced table wine.",
+   adapt:"Heat-tolerant native varieties give the Douro a real advantage; altitude (Douro Superior) and northern slopes the long-term play."},
+  {name:"Vinho Verde",country:"Portugal",lat:41.5,lng:-8.4,gst2020:17.0,optimal:15.5,sens:1.05,tier:1,est:true,
+   grapes:["Alvarinho","Loureiro"],risks:["fungal disease","autumn rain"],
+   desc:"Humid Atlantic north-west Portugal. Like Rías Baixas across the border, warming is currently easing chronic mildew pressure.",
+   adapt:"Alvarinho's premium-track positioning continues; some producers experiment with later-ripening Mediterranean grapes."},
+  {name:"Alentejo",country:"Portugal",lat:38.5,lng:-7.9,gst2020:20.3,optimal:18.5,sens:1.05,tier:1,est:true,
+   grapes:["Aragonez","Trincadeira","Antão Vaz"],risks:["extreme heat","drought","wildfire"],
+   desc:"Sprawling sun-baked southern plain. Already at the edge for balanced wine; some sub-zones face existential water-supply questions.",
+   adapt:"Drip irrigation efficiency; northern and elevated sub-zones (Portalegre) become the cooler refuge."},
+  {name:"Dão",country:"Portugal",lat:40.65,lng:-7.9,gst2020:18.0,optimal:17.0,sens:1.1,tier:2,est:true,
+   grapes:["Touriga Nacional","Encruzado"],risks:["heatwave","wildfire"],
+   desc:"Granite-soil plateau ringed by mountains. Elevation (400–700 m) preserves freshness in reds and balance in Encruzado whites.",
+   adapt:"Higher-altitude vineyards expanding; producers refine elegant, less extracted styles to suit warming summers."},
+  {name:"Madeira",country:"Portugal",lat:32.66,lng:-16.92,gst2020:19.5,optimal:17.5,sens:0.95,tier:2,est:true,
+   grapes:["Tinta Negra","Sercial","Verdelho","Bual","Malvasia"],risks:["sea-level rise","wildfire"],
+   desc:"Mid-Atlantic volcanic island. The estufagem (heating) process is built into Madeira's style — but vineyard ripening is itself accelerating.",
+   adapt:"Higher-altitude north-facing terraces preserve acidity in base wines; the long-term threat is land loss to coastal infrastructure."},
+
+  // ===== CENTRAL & NORTHERN EUROPE =====
+  {name:"Mosel",country:"Germany",lat:49.98,lng:7.0,gst2020:15.0,optimal:14.5,sens:1.18,tier:1,est:false,
+   grapes:["Riesling"],risks:["overripeness","loss of acidity"],
+   desc:"Steep slate Riesling slopes. Decades of warming have erased thin vintages — now over-ripeness and acid loss are the worry.",
+   adapt:"Earlier harvests; revival of high-elevation side-valley vineyards. Trocken (dry) styles increasingly dominate."},
+  {name:"Rheingau",country:"Germany",lat:50.0,lng:8.0,gst2020:15.6,optimal:15.0,sens:1.15,tier:1,est:true,
+   grapes:["Riesling","Spätburgunder"],risks:["overripeness","spring frost"],
+   desc:"South-facing slope along the Rhine — historically a Riesling reference. Warming has pushed many sites past their classical sweet spot.",
+   adapt:"Dry Grosses Gewächs tier dominates premium production; Pinot Noir (Spätburgunder) now a serious red category."},
+  {name:"Pfalz",country:"Germany",lat:49.43,lng:8.18,gst2020:16.1,optimal:15.5,sens:1.12,tier:1,est:true,
+   grapes:["Riesling","Spätburgunder"],risks:["heatwave","drought"],
+   desc:"Germany's warmest major region, sheltered east of the Haardt mountains. Riesling style trends progressively riper and richer.",
+   adapt:"Pfalz pioneers continue serious work with Mediterranean varieties (Cabernet, Syrah) as well as native PIWI hybrids."},
+  {name:"Wachau",country:"Austria",lat:48.37,lng:15.45,gst2020:16.5,optimal:15.5,sens:1.15,tier:1,est:true,
+   grapes:["Grüner Veltliner","Riesling"],risks:["heatwave","hail"],
+   desc:"Iconic Danube terraces. Grüner's pepper note and Riesling's stone-fruit acidity both increasingly hard to preserve at lower-elevation sites.",
+   adapt:"Higher terraces and side-valley parcels gain emphasis; the Smaragd ripeness tier is being re-thought."},
+  {name:"Burgenland",country:"Austria",lat:47.7,lng:16.65,gst2020:17.5,optimal:17.0,sens:1.1,tier:1,est:true,
+   grapes:["Blaufränkisch","Zweigelt"],risks:["heatwave","lake effects"],
+   desc:"Around shallow Lake Neusiedl. Blaufränkisch is heat-tolerant and finally getting its due as a serious red — climate is on its side.",
+   adapt:"Cooler Eisenberg and Leithaberg sub-zones gain prestige; sweet-wine production (lake-mist botrytis) becomes less predictable."},
+  {name:"Tokaj",country:"Hungary",lat:48.1,lng:21.4,gst2020:17.0,optimal:16.5,sens:1.1,tier:1,est:false,
+   grapes:["Furmint","Hárslevelű"],risks:["botrytis timing","autumn rain"],
+   desc:"Sweet Aszú depends on autumn botrytis — humidity and the timing of fog and rain matter more than peak temperature.",
+   adapt:"Dry Furmint already growing as a category; sweet-wine production becomes less reliable vintage-to-vintage."},
+  {name:"Valais",country:"Switzerland",lat:46.2,lng:7.4,gst2020:16.8,optimal:16.0,sens:1.2,tier:2,est:true,
+   grapes:["Chasselas","Petite Arvine","Pinot Noir"],risks:["glacier melt","heatwave"],
+   desc:"Inner Alpine valley with extraordinary terraced vineyards. Glacier-fed irrigation is being directly affected by retreating ice fields.",
+   adapt:"Native varieties (Heida, Cornalin, Humagne) gain prominence; investment in efficient drip irrigation accelerates."},
+  {name:"Moravia",country:"Czechia",lat:48.85,lng:16.7,gst2020:16.2,optimal:15.5,sens:1.2,tier:2,est:true,
+   grapes:["Grüner Veltliner","Welschriesling"],risks:["heatwave","spring frost"],
+   desc:"Czech Republic's wine heartland near the Austrian border. A long-overlooked region now ripening reliably for the first time.",
+   adapt:"Producers experiment with Pinot Noir and Riesling; cool-climate identity may shift as warming continues."},
+  {name:"Sussex / Kent",country:"England",lat:50.95,lng:0.4,gst2020:14.4,optimal:15.2,sens:1.15,tier:1,est:false,
+   grapes:["Chardonnay","Pinot Noir"],risks:["spring frost","harvest rain"],
+   desc:"The textbook climate-change success story. Once impossible, now a credible traditional-method sparkling region — and still improving.",
+   adapt:"Investment is global; Champagne houses already on the ground. Watch Hampshire, Essex, and Wales as the frontier expands."},
+  {name:"Hampshire",country:"England",lat:51.1,lng:-1.3,gst2020:14.3,optimal:15.0,sens:1.15,tier:2,est:true,
+   grapes:["Chardonnay","Pinot Noir","Pinot Meunier"],risks:["spring frost","harvest rain"],
+   desc:"Chalk-soil sparkling-wine frontier — geologically continuous with Champagne. Climate-driven plantings still expanding rapidly.",
+   adapt:"Newer sites at lower-frost-risk elevations chosen carefully; estate-level capital investment still accelerating."},
+  {name:"Southern Sweden",country:"Sweden",lat:55.6,lng:13.4,gst2020:13.4,optimal:14.8,sens:1.4,tier:2,est:false,
+   grapes:["Solaris","Pinot Noir"],risks:["short season","spring frost"],
+   desc:"A genuine new frontier. Cold-marginal today, but among the fastest-warming wine latitudes — viability arriving within a generation.",
+   adapt:"Disease-resistant PIWI hybrids (Solaris, Souvignier Gris) dominate; vinifera plantings will follow as growing seasons lengthen."},
+  {name:"Denmark",country:"Denmark",lat:55.7,lng:11.5,gst2020:13.5,optimal:14.8,sens:1.35,tier:3,est:true,
+   grapes:["Solaris","Rondo"],risks:["short season","harvest rain"],
+   desc:"A handful of pioneering producers on Sjælland and Funen. Still emerging; PIWI hybrids carry essentially the entire region.",
+   adapt:"Growing-season length is the binding constraint; warming is opening real options for the first time."},
+
+  // ===== EASTERN MED & CAUCASUS =====
+  {name:"Santorini",country:"Greece",lat:36.4,lng:25.43,gst2020:20.0,optimal:18.5,sens:1.0,tier:1,est:true,
+   grapes:["Assyrtiko"],risks:["extreme heat","drought","tourism land-use"],
+   desc:"Bush-trained Assyrtiko on volcanic pumice — the koulourato basket-vine traps morning fog. A geographically tiny but iconic island.",
+   adapt:"Land-use pressure from tourism may be more existential than climate; old-vine Assyrtiko shows remarkable drought tolerance."},
+  {name:"Naoussa",country:"Greece",lat:40.63,lng:22.07,gst2020:18.5,optimal:17.0,sens:1.05,tier:2,est:true,
+   grapes:["Xinomavro"],risks:["heatwave","hail"],
+   desc:"Xinomavro is Greece's answer to Nebbiolo — high acid, high tannin, perfumed. Heat increasingly threatens that aromatic balance.",
+   adapt:"Higher Vermio mountain plantings; experimentation with later-ripening clones and northern aspects."},
+  {name:"Bekaa Valley",country:"Lebanon",lat:33.85,lng:35.92,gst2020:19.5,optimal:18.5,sens:1.0,tier:1,est:true,
+   grapes:["Cinsault","Cabernet Sauvignon","Syrah"],risks:["water scarcity","political instability"],
+   desc:"High-altitude plateau (900–1000 m) between mountain ranges. Climate plus political risk shape the long-term picture more than warming alone.",
+   adapt:"Established producers continue investing in altitude-driven freshness; some Mediterranean grape diversification."},
+  {name:"Galilee & Golan",country:"Israel",lat:33.0,lng:35.6,gst2020:18.4,optimal:17.8,sens:1.05,tier:1,est:true,
+   grapes:["Cabernet Sauvignon","Syrah"],risks:["heatwave","wildfire"],
+   desc:"Cooler northern plateaus (Upper Galilee, Golan Heights) at 700–1200 m anchor Israel's premium production.",
+   adapt:"Drip irrigation excellence; experimentation with Mediterranean and indigenous-revival grapes (Marawi, Bittuni)."},
+  {name:"Kakheti",country:"Georgia",lat:41.93,lng:45.7,gst2020:18.5,optimal:17.5,sens:1.1,tier:1,est:true,
+   grapes:["Saperavi","Rkatsiteli"],risks:["heatwave","hail"],
+   desc:"The ancestral home of wine (~8000 BC). Kakheti's Alazani Valley still produces the bulk of Georgia's qvevri amber and red wines.",
+   adapt:"Saperavi's late ripening provides headroom; foothill plantings on the Caucasus slopes gain value."},
+
+  // ===== USA — CALIFORNIA =====
+  {name:"Napa Valley",country:"USA",lat:38.5,lng:-122.33,gst2020:19.4,optimal:18.0,sens:1.12,tier:1,est:false,
+   grapes:["Cabernet Sauvignon"],risks:["wildfire smoke","drought","heat dome"],
+   desc:"Premium Cabernet endures, but the margin is shrinking and wildfire smoke now drives total vintage losses.",
+   adapt:"Higher-elevation AVAs (Mt. Veeder, Howell Mountain) and Coombsville's cooler airflow gain prominence. Smoke risk is the wildcard."},
+  {name:"Sonoma Coast",country:"USA",lat:38.4,lng:-123.0,gst2020:16.2,optimal:15.8,sens:1.1,tier:1,est:true,
+   grapes:["Pinot Noir","Chardonnay"],risks:["wildfire smoke","fog timing"],
+   desc:"Fog-cooled extreme coastal Pinot — one of the few California regions still firmly cool-climate. Recent wildfire vintages remain the scar.",
+   adapt:"West Sonoma Coast sub-AVA encodes the coolest zone; some producers retreat to even closer-to-ocean sites."},
+  {name:"Russian River Valley",country:"USA",lat:38.5,lng:-122.83,gst2020:16.8,optimal:16.0,sens:1.12,tier:1,est:true,
+   grapes:["Pinot Noir","Chardonnay","Zinfandel"],risks:["wildfire smoke","drought"],
+   desc:"Fog-influenced western Sonoma. Pinot's signature here is the bright cherry-and-cola balance — increasingly at risk in hot years.",
+   adapt:"Earlier picks; some producers leaning into the warmer style rather than fighting it."},
+  {name:"Anderson Valley",country:"USA",lat:39.0,lng:-123.4,gst2020:15.6,optimal:15.8,sens:1.1,tier:2,est:true,
+   grapes:["Pinot Noir","Chardonnay"],risks:["wildfire smoke","fog timing"],
+   desc:"Tucked into Mendocino's coastal hills with substantial fog ingress. A surprise climate winner — currently still cool enough.",
+   adapt:"Sparkling-wine specialty (Roederer Estate) thrives; warming may close the gap with Champagne base-wine quality."},
+  {name:"Paso Robles",country:"USA",lat:35.62,lng:-120.7,gst2020:19.0,optimal:18.0,sens:1.1,tier:1,est:true,
+   grapes:["Cabernet Sauvignon","Syrah","Zinfandel"],risks:["drought","heatwave","wildfire"],
+   desc:"Vast warm-climate inland AVA with massive diurnal swings. Old-vine Zin and Rhône-style reds dominate; water access is the existential issue.",
+   adapt:"Adelaida (western, cooler, higher) sub-AVA increasingly the premium bet; aquifer depletion accelerates dry-farming."},
+  {name:"Santa Barbara (Sta. Rita Hills)",country:"USA",lat:34.65,lng:-120.43,gst2020:15.5,optimal:15.8,sens:1.05,tier:1,est:true,
+   grapes:["Pinot Noir","Chardonnay"],risks:["wildfire smoke","fog timing"],
+   desc:"Transverse east-west valley funnels Pacific fog deep inland — one of California's coolest viable Pinot zones.",
+   adapt:"The transverse geography is the structural advantage; warming threatens it only at the eastern edge."},
+  {name:"Santa Maria Valley",country:"USA",lat:34.95,lng:-120.4,gst2020:15.8,optimal:15.8,sens:1.05,tier:2,est:true,
+   grapes:["Pinot Noir","Chardonnay","Syrah"],risks:["wildfire smoke","drought"],
+   desc:"Coastal Pacific bench north of Santa Barbara. Cool by California standards; the Bien Nacido site is a Pinot benchmark.",
+   adapt:"Maritime aspect protects the region; warming widens the viable grape palette into cool-climate Syrah."},
+  {name:"Lodi",country:"USA",lat:38.13,lng:-121.27,gst2020:19.5,optimal:18.5,sens:1.1,tier:2,est:true,
+   grapes:["Zinfandel","Cabernet Sauvignon"],risks:["heatwave","drought"],
+   desc:"Inland Central Valley fringe. Old-vine Zinfandel is the heritage story; bulk-wine economics drive most plantings.",
+   adapt:"Mediterranean and southern Italian grape trials (Aglianico, Albariño, Vermentino) increasingly prominent."},
+  {name:"Santa Cruz Mountains",country:"USA",lat:37.15,lng:-122.1,gst2020:16.5,optimal:16.5,sens:1.05,tier:2,est:true,
+   grapes:["Pinot Noir","Cabernet Sauvignon","Chardonnay"],risks:["wildfire","drought"],
+   desc:"Fog-and-elevation AVA above Silicon Valley. Steep, dramatic vineyards on both ocean and bay sides.",
+   adapt:"Ridge-top sites continue to favour cooler-climate varieties; fire risk is the dominant operational concern."},
+
+  // Napa sub-AVAs (tier 3)
+  {name:"Oakville",region:"Napa Valley",country:"USA",lat:38.44,lng:-122.4,gst2020:19.5,optimal:18.0,sens:1.12,tier:3,est:true,
+   grapes:["Cabernet Sauvignon"],risks:["wildfire smoke","heatwave"],
+   desc:"Heart of Napa Cabernet — alluvial fans of the central valley. Diurnal swings still ~20°C but absolute highs increasing.",
+   adapt:"Cover crops, careful irrigation, and earlier picks. Bench vs. valley-floor distinctions sharpen."},
+  {name:"Stags Leap District",region:"Napa Valley",country:"USA",lat:38.4,lng:-122.32,gst2020:19.3,optimal:18.0,sens:1.1,tier:3,est:true,
+   grapes:["Cabernet Sauvignon"],risks:["wildfire smoke","heatwave"],
+   desc:"East-side sub-AVA with afternoon shade from the Stags Leap palisades. Naturally cooler than central valley — a useful structural buffer.",
+   adapt:"Eastern-aspect plantings hold up best; producers extend hang time without sacrificing acidity through precision farming."},
+  {name:"Howell Mountain",region:"Napa Valley",country:"USA",lat:38.55,lng:-122.45,gst2020:18.4,optimal:18.0,sens:1.08,tier:3,est:true,
+   grapes:["Cabernet Sauvignon"],risks:["wildfire","heat dome"],
+   desc:"Above the fog line at ~500–700 m. Cooler maximums but more direct UV; thick-skinned Cabernet thrives.",
+   adapt:"Mountain-fruit profile increasingly prized as the valley floor over-ripens; fire-defensible-space requirements drive replanting."},
+  {name:"Mt. Veeder",region:"Napa Valley",country:"USA",lat:38.4,lng:-122.45,gst2020:18.0,optimal:17.8,sens:1.08,tier:3,est:true,
+   grapes:["Cabernet Sauvignon"],risks:["wildfire","drought"],
+   desc:"Steep, low-yield mountain AVA south-west of Napa. The coolest of the mountain AVAs; structural, slow-ripening fruit.",
+   adapt:"Inherent thermal moderation gives Mt. Veeder real long-term headroom — when fire risk allows."},
+  {name:"Carneros",region:"Napa/Sonoma",country:"USA",lat:38.22,lng:-122.34,gst2020:16.7,optimal:16.0,sens:1.1,tier:3,est:true,
+   grapes:["Pinot Noir","Chardonnay"],risks:["wildfire smoke","drought"],
+   desc:"Cool sub-AVA spanning Napa and Sonoma at the San Pablo Bay edge. The Bay-fog buffer makes this Napa's cool-climate refuge.",
+   adapt:"Sparkling-wine production (Domaine Carneros) thrives; warming may push Pinot away even from this normally-cool zone."},
+
+  // ===== USA — PNW & OTHER STATES =====
+  {name:"Willamette Valley",country:"USA",lat:45.2,lng:-123.1,gst2020:16.0,optimal:15.8,sens:1.12,tier:1,est:false,
+   grapes:["Pinot Noir","Chardonnay"],risks:["heat dome","wildfire smoke"],
+   desc:"Cool Oregon Pinot zone. Warming improved ripeness consistency, but the 2021 heat dome was a warning shot.",
+   adapt:"Coastal-influenced sub-AVAs (Eola-Amity, Yamhill-Carlton) hold up best. Smoke-resistant winemaking techniques now standard."},
+  {name:"Walla Walla Valley",country:"USA",lat:46.07,lng:-118.34,gst2020:17.5,optimal:17.5,sens:1.15,tier:1,est:true,
+   grapes:["Cabernet Sauvignon","Syrah"],risks:["heatwave","wildfire smoke","winter freeze"],
+   desc:"Inland Washington-Oregon valley. Already a serious Cabernet and Syrah region; The Rocks District is a singular cobblestone outlier.",
+   adapt:"Lower-elevation areas warm fastest; higher-elevation Oregon-side plantings (Mill Creek) gain prestige."},
+  {name:"Columbia Valley",country:"USA",lat:46.5,lng:-119.5,gst2020:17.2,optimal:17.0,sens:1.15,tier:1,est:true,
+   grapes:["Cabernet Sauvignon","Merlot","Syrah","Riesling"],risks:["winter freeze","heatwave","wildfire smoke"],
+   desc:"Vast Washington appellation. Continental climate brings real winter freeze risk but also generous ripening summer.",
+   adapt:"Site-specific microclimate selection becomes increasingly important; cold-air-drainage sites preferred."},
+  {name:"Red Mountain",region:"Washington",country:"USA",lat:46.27,lng:-119.45,gst2020:18.5,optimal:18.0,sens:1.15,tier:3,est:true,
+   grapes:["Cabernet Sauvignon","Syrah"],risks:["heatwave","wildfire smoke"],
+   desc:"Steep south-west-facing slope — Washington's warmest AVA. Already producing dense, structured Cabernet.",
+   adapt:"Earlier picks; some producers experiment with Mediterranean grapes (Tempranillo, Petit Verdot)."},
+  {name:"Finger Lakes",country:"USA",lat:42.7,lng:-76.9,gst2020:15.6,optimal:15.5,sens:1.15,tier:1,est:false,
+   grapes:["Riesling","Cabernet Franc"],risks:["winter freeze","late frost"],
+   desc:"Lake-buffered upstate New York. Currently near-ideal for Riesling with decades of headroom — a quiet climate winner.",
+   adapt:"Vinifera plantings continue to displace native and hybrid grapes as lakes moderate increasingly mild winters."},
+  {name:"Long Island",country:"USA",lat:40.95,lng:-72.5,gst2020:16.8,optimal:16.5,sens:1.1,tier:2,est:true,
+   grapes:["Cabernet Franc","Merlot","Chardonnay"],risks:["hurricane","sea-level rise","autumn rain"],
+   desc:"Maritime Bordeaux-style region on the North Fork. Hurricane intensification is the existential operational risk.",
+   adapt:"Early-ripening varieties favoured; sea-level rise threatens low-lying eastern vineyards directly."},
+  {name:"Virginia (Monticello)",country:"USA",lat:38.0,lng:-78.5,gst2020:17.5,optimal:17.0,sens:1.1,tier:2,est:true,
+   grapes:["Cabernet Franc","Viognier","Petit Manseng"],risks:["hurricane","humidity","late frost"],
+   desc:"Humid mid-Atlantic. Disease pressure is the dominant constraint; warming intensifies summer storms and pests.",
+   adapt:"Petit Manseng's thick skins and Viognier's Rhône origins both well-suited; producers continue to refine the regional identity."},
+  {name:"Texas Hill Country",country:"USA",lat:30.25,lng:-98.95,gst2020:20.0,optimal:19.0,sens:1.1,tier:2,est:true,
+   grapes:["Tempranillo","Mourvèdre","Viognier"],risks:["heat dome","drought","hail"],
+   desc:"Hot continental climate, Mediterranean-leaning grape choices. Tempranillo and Mediterranean varieties dominate plantings.",
+   adapt:"Drought-tolerant trellising; producers experiment with Greek and Italian-southern varieties as the climate becomes more extreme."},
+  {name:"Michigan (Old Mission)",country:"USA",lat:44.92,lng:-85.5,gst2020:14.6,optimal:15.0,sens:1.2,tier:2,est:true,
+   grapes:["Riesling","Chardonnay","Pinot Noir"],risks:["winter freeze","spring frost"],
+   desc:"Narrow lake-moderated peninsula north of Traverse City. Currently cold-marginal; one of America's clearest near-term climate winners.",
+   adapt:"Vinifera expanding aggressively as winter lows soften; sparkling production gaining momentum."},
+
+  // ===== CANADA =====
+  {name:"Okanagan Valley",country:"Canada",lat:49.9,lng:-119.5,gst2020:15.6,optimal:16.0,sens:1.3,tier:1,est:false,
+   grapes:["Pinot Noir","Riesling"],risks:["wildfire smoke","winter freeze","drought"],
+   desc:"Northern desert valley warming fast. Shifting from marginal to competitive for cool-climate reds and aromatic whites.",
+   adapt:"Bordeaux varietals now viable at the southern end; smoke risk is the major drag on the otherwise sunny outlook."},
+  {name:"Niagara Peninsula",country:"Canada",lat:43.18,lng:-79.13,gst2020:15.5,optimal:15.8,sens:1.2,tier:1,est:true,
+   grapes:["Riesling","Chardonnay","Cabernet Franc"],risks:["winter freeze","ice wine reliability"],
+   desc:"Lake-Ontario-buffered Ontario region. Ice wine — once a structural specialty — becomes less reliable as winters mild.",
+   adapt:"Table-wine quality continues to rise; the iconic ice wine category faces gradual decline as January cold snaps soften."},
+  {name:"Prince Edward County",country:"Canada",lat:43.95,lng:-77.15,gst2020:15.0,optimal:15.5,sens:1.25,tier:2,est:true,
+   grapes:["Pinot Noir","Chardonnay"],risks:["winter freeze","spring frost"],
+   desc:"Ontario peninsula in Lake Ontario. Vines are buried (hilled-up) each winter — a practice that may become unnecessary within decades.",
+   adapt:"Burgundian focus on Pinot and Chardonnay; producers anticipate a long climate runway."},
+  {name:"Nova Scotia",country:"Canada",lat:45.05,lng:-64.4,gst2020:14.0,optimal:15.0,sens:1.35,tier:1,est:false,
+   grapes:["L'Acadie","Chardonnay"],risks:["hurricane","spring frost"],
+   desc:"Emerging Atlantic sparkling frontier. Currently cold-marginal; high-latitude warming is opening a real future window.",
+   adapt:"Tidal Bay appellation and traditional-method sparkling lead. Vinifera plantings increasingly displace hybrids."},
+
+  // ===== MEXICO =====
+  {name:"Valle de Guadalupe",country:"Mexico",lat:32.1,lng:-116.62,gst2020:20.0,optimal:18.5,sens:1.05,tier:1,est:true,
+   grapes:["Cabernet Sauvignon","Tempranillo","Nebbiolo"],risks:["drought","heatwave","wildfire"],
+   desc:"Baja California's Mediterranean valley north-east of Ensenada. Already hot and increasingly water-constrained.",
+   adapt:"Dry farming heritage from Spanish missions remains influential; some producers explore desert-tolerant grape diversity."},
+
+  // ===== SOUTH AMERICA =====
+  {name:"Mendoza",country:"Argentina",lat:-33.0,lng:-68.8,gst2020:18.8,optimal:18.0,sens:1.1,tier:1,est:false,
+   grapes:["Malbec"],risks:["snowmelt loss","hail","drought"],
+   desc:"High-altitude desert buffers some heat, but shrinking Andean snowmelt for irrigation is the long-term existential threat.",
+   adapt:"Uco Valley (1100–1500 m) the obvious refuge. Drip irrigation efficiency and water-rights reform increasingly urgent."},
+  {name:"Uco Valley",region:"Mendoza",country:"Argentina",lat:-33.7,lng:-69.18,gst2020:17.0,optimal:17.0,sens:1.1,tier:2,est:true,
+   grapes:["Malbec","Cabernet Franc","Chardonnay"],risks:["hail","frost","snowmelt loss"],
+   desc:"High Mendoza sub-region at 1100–1500 m. Cooler diurnals than the valley floor produce structured, perfumed reds.",
+   adapt:"Gualtallary and Paraje Altamira sub-zones drive premium pricing; producers continue planting progressively higher."},
+  {name:"Cafayate (Salta)",country:"Argentina",lat:-26.07,lng:-65.97,gst2020:18.5,optimal:17.8,sens:1.1,tier:1,est:true,
+   grapes:["Torrontés","Malbec","Tannat"],risks:["hail","drought"],
+   desc:"World's highest commercial vineyards at 1700–3000 m in north-western Argentina. Altitude buffers latitude-driven heat.",
+   adapt:"Extreme-altitude plantings continue to push higher; Tannat shows promise in the heat."},
+  {name:"Patagonia",country:"Argentina",lat:-39.0,lng:-67.6,gst2020:15.5,optimal:16.0,sens:1.05,tier:1,est:false,
+   grapes:["Pinot Noir","Malbec"],risks:["wind","frost"],
+   desc:"Windy southern frontier, currently cool-marginal. Warming is steadily expanding viable acreage southward.",
+   adapt:"New plantings creeping south into Chubut. Cool-climate Pinot and sparkling base wine are the natural fit."},
+  {name:"Maipo Valley",country:"Chile",lat:-33.7,lng:-70.7,gst2020:18.4,optimal:17.8,sens:1.0,tier:1,est:false,
+   grapes:["Cabernet Sauvignon","Carménère"],risks:["megadrought","water stress"],
+   desc:"Mediterranean and severely drought-pressured by Chile's prolonged megadrought.",
+   adapt:"Coastal (Aconcagua Costa, Casablanca) and Andean sub-zones become the resilient bets. Dry-farmed old vines gain value."},
+  {name:"Casablanca",country:"Chile",lat:-33.3,lng:-71.4,gst2020:16.0,optimal:15.8,sens:1.0,tier:1,est:true,
+   grapes:["Sauvignon Blanc","Chardonnay","Pinot Noir"],risks:["drought","fog timing"],
+   desc:"Cool Pacific-influenced valley near Valparaíso. Chile's leading premium white-wine region.",
+   adapt:"Coastal-most sub-zones (Lo Orozco) gain emphasis; water-rights questions intensify as drought continues."},
+  {name:"Colchagua",country:"Chile",lat:-34.7,lng:-71.2,gst2020:18.3,optimal:17.5,sens:1.0,tier:1,est:true,
+   grapes:["Cabernet Sauvignon","Carménère","Syrah"],risks:["drought","heatwave"],
+   desc:"Warm Central Valley region; the Apalta amphitheatre produces some of Chile's most prestigious reds.",
+   adapt:"Coastal sub-regions (Paredones, Marchigüe) ascend in importance; dry-farming techniques expand."},
+  {name:"Itata Valley",country:"Chile",lat:-36.6,lng:-72.3,gst2020:17.2,optimal:16.5,sens:1.05,tier:2,est:true,
+   grapes:["País","Cinsault","Muscat"],risks:["drought","wildfire"],
+   desc:"Old-vine renaissance region south of Bío Bío. Dry-farmed bush vines of País and Cinsault, planted by Jesuits — a quiet new global story.",
+   adapt:"Heritage vineyard preservation aligns naturally with climate-resilient old-vine bush training."},
+  {name:"Maldonado / Garzón",country:"Uruguay",lat:-34.5,lng:-55.1,gst2020:17.0,optimal:17.0,sens:1.05,tier:2,est:true,
+   grapes:["Tannat","Albariño"],risks:["humidity","autumn rain"],
+   desc:"Maritime Atlantic Uruguay, near Punta del Este. Tannat is the regional flagship; Albariño is a recent success.",
+   adapt:"Coastal influence buffers heat; the long-term challenge is wet-vintage disease pressure as humidity rises."},
+
+  // ===== SOUTH AFRICA =====
+  {name:"Stellenbosch",country:"South Africa",lat:-33.93,lng:18.85,gst2020:19.0,optimal:18.0,sens:1.0,tier:1,est:false,
+   grapes:["Cabernet Sauvignon","Chenin Blanc"],risks:["drought","heatwave","wildfire"],
+   desc:"Heat and severe drought (cf. 2018 Cape water crisis) are the defining risks. Old-vine Chenin shows remarkable resilience.",
+   adapt:"Site selection is everything — south-facing slopes, cooler Elgin and Hemel-en-Aarde push the frontier."},
+  {name:"Swartland",country:"South Africa",lat:-33.45,lng:18.7,gst2020:19.5,optimal:18.5,sens:1.0,tier:1,est:true,
+   grapes:["Chenin Blanc","Syrah","Grenache"],risks:["drought","heatwave","wildfire"],
+   desc:"Dry-farmed old-vine country an hour north of Cape Town. The young-producer renaissance here has redefined South African wine.",
+   adapt:"Mediterranean varieties suit the dry climate well; the heritage of dry-farmed bush vines is itself climate-adaptive."},
+  {name:"Hemel-en-Aarde",country:"South Africa",lat:-34.4,lng:19.2,gst2020:16.5,optimal:16.0,sens:1.05,tier:2,est:true,
+   grapes:["Pinot Noir","Chardonnay"],risks:["wildfire","autumn rain"],
+   desc:"Cool sea-influenced valley behind Hermanus — South Africa's leading Pinot zone.",
+   adapt:"Maritime moderation is the structural advantage; producers continue to push the cool-climate identity."},
+  {name:"Elgin",country:"South Africa",lat:-34.16,lng:19.04,gst2020:16.8,optimal:16.5,sens:1.05,tier:2,est:true,
+   grapes:["Sauvignon Blanc","Pinot Noir","Chardonnay"],risks:["wildfire","frost"],
+   desc:"High-altitude apple-growing plateau (300–500 m) recently converted to viticulture. One of South Africa's coolest viable wine zones.",
+   adapt:"Altitude-driven freshness will outlast many neighbouring regions; planting still expanding rapidly."},
+  {name:"Constantia",country:"South Africa",lat:-34.04,lng:18.42,gst2020:18.0,optimal:17.5,sens:1.0,tier:2,est:true,
+   grapes:["Sauvignon Blanc","Sémillon","Muscat"],risks:["urban encroachment","drought"],
+   desc:"Cape Town's historic estate cradle. Sea breezes from False Bay buffer the otherwise warm latitude.",
+   adapt:"Sweet Vin de Constance heritage continues; sea-breeze moderation provides a real climate cushion."},
+
+  // ===== AUSTRALIA =====
+  {name:"Barossa Valley",country:"Australia",lat:-34.53,lng:138.95,gst2020:19.8,optimal:18.5,sens:1.05,tier:1,est:false,
+   grapes:["Shiraz","Grenache"],risks:["heatwave","drought","bushfire"],
+   desc:"Iconic but hot and dry. Heat-tolerant old-vine Shiraz and Grenache help, yet long-term suitability for balanced wine declines.",
+   adapt:"Eden Valley (higher elevation) increasingly the cool refuge. Mediterranean varieties (Mataro, Tempranillo, Fiano) gain share."},
+  {name:"Eden Valley",country:"Australia",lat:-34.62,lng:139.07,gst2020:18.0,optimal:17.5,sens:1.1,tier:1,est:true,
+   grapes:["Riesling","Shiraz"],risks:["bushfire","drought"],
+   desc:"Higher-altitude (400–500 m) neighbour of Barossa. Australian Riesling's premier zone.",
+   adapt:"Elevation buffer protects whites longest; some Shiraz growers move uphill from Barossa proper."},
+  {name:"Clare Valley",country:"Australia",lat:-33.83,lng:138.62,gst2020:18.5,optimal:17.5,sens:1.05,tier:1,est:true,
+   grapes:["Riesling","Shiraz"],risks:["bushfire","drought","heatwave"],
+   desc:"Continental South Australian valley — Riesling here is unusually muscular thanks to high diurnal swings.",
+   adapt:"Higher western slopes and Watervale sub-region gain prominence; producers explore Mediterranean whites."},
+  {name:"Adelaide Hills",country:"Australia",lat:-35.0,lng:138.78,gst2020:17.5,optimal:16.8,sens:1.1,tier:1,est:true,
+   grapes:["Sauvignon Blanc","Chardonnay","Pinot Noir"],risks:["bushfire","spring frost"],
+   desc:"Cool, elevated hills just east of Adelaide. Currently among Australia's cooler mainland producing regions.",
+   adapt:"Bushfire (e.g. 2019/20 vintage devastation) is the most acute operational risk; cool-climate identity holds for now."},
+  {name:"McLaren Vale",country:"Australia",lat:-35.22,lng:138.55,gst2020:19.5,optimal:18.5,sens:1.0,tier:1,est:true,
+   grapes:["Shiraz","Grenache","Cabernet Sauvignon"],risks:["heatwave","drought"],
+   desc:"Coastal Mediterranean region south of Adelaide. Old-vine Grenache and Shiraz remain the heritage strength.",
+   adapt:"Mediterranean varieties (Fiano, Vermentino, Nero d'Avola, Tempranillo) increasingly common in new plantings."},
+  {name:"Coonawarra",country:"Australia",lat:-37.3,lng:140.83,gst2020:17.0,optimal:17.5,sens:1.05,tier:1,est:true,
+   grapes:["Cabernet Sauvignon"],risks:["heatwave","spring frost"],
+   desc:"Famous terra rossa over limestone strip in South Australia's Limestone Coast. Cooler than Barossa — and a structural climate advantage.",
+   adapt:"The cool latitude and inherent soil-led identity protect Coonawarra better than most warm-climate Australian regions."},
+  {name:"Margaret River",country:"Australia",lat:-33.95,lng:115.06,gst2020:18.5,optimal:18.0,sens:1.0,tier:1,est:true,
+   grapes:["Cabernet Sauvignon","Chardonnay","Sauvignon Blanc"],risks:["bushfire","drought"],
+   desc:"Maritime peninsula in Western Australia. Two-ocean moderation produces remarkably even ripening and structured wines.",
+   adapt:"Maritime aspect is a genuine long-term advantage; some producers experiment with Italian and Iberian whites."},
+  {name:"Hunter Valley",country:"Australia",lat:-32.78,lng:151.3,gst2020:21.0,optimal:18.5,sens:1.0,tier:1,est:true,
+   grapes:["Semillon","Shiraz"],risks:["extreme heat","drought","bushfire"],
+   desc:"Hot, humid sub-tropical region north of Sydney. Hunter Semillon is unique — picked early at low alcohol; warming threatens that style first.",
+   adapt:"Earlier picks (already mid-January); the Pokolbin sub-region's lower-elevation lines are most heat-stressed."},
+  {name:"Yarra Valley",country:"Australia",lat:-37.65,lng:145.55,gst2020:16.8,optimal:16.5,sens:1.1,tier:1,est:true,
+   grapes:["Pinot Noir","Chardonnay"],risks:["bushfire smoke","heatwave"],
+   desc:"Victoria's cool-climate hills east of Melbourne. Bushfire-smoke vintages (2019/20) demonstrate the operational risk acutely.",
+   adapt:"Higher Upper Yarra sub-zones retain Pinot identity longest; some warmer-style producers shift toward Mediterranean varieties."},
+  {name:"Mornington Peninsula",country:"Australia",lat:-38.35,lng:145.0,gst2020:16.0,optimal:16.0,sens:1.05,tier:1,est:true,
+   grapes:["Pinot Noir","Chardonnay"],risks:["bushfire","autumn rain"],
+   desc:"Cool maritime peninsula south-east of Melbourne. Pinot-focused since the 1980s; one of Australia's best long-term cool-climate bets.",
+   adapt:"Maritime moderation a real long-term advantage; producers refine site-by-site sub-AVA understanding."},
+  {name:"Heathcote",country:"Australia",lat:-36.92,lng:144.7,gst2020:17.8,optimal:17.5,sens:1.05,tier:2,est:true,
+   grapes:["Shiraz","Cabernet Sauvignon"],risks:["bushfire","drought"],
+   desc:"Cambrian red-soil Shiraz country in central Victoria. The famous ancient red Cambrian soil drives intense, structured wines.",
+   adapt:"Continental climate provides cool nights even in warm years; soil identity remains the defining attribute."},
+  {name:"Canberra District",country:"Australia",lat:-35.0,lng:149.27,gst2020:17.5,optimal:17.0,sens:1.1,tier:2,est:true,
+   grapes:["Shiraz","Riesling"],risks:["bushfire","drought","frost"],
+   desc:"High-altitude (600–800 m) plateau outside the capital. Cool-elevation continental — perfumed Shiraz a signature.",
+   adapt:"Elevation provides real buffer; bushfire risk is the operationally dominant concern."},
+  {name:"Tasmania",country:"Australia",lat:-42.0,lng:147.3,gst2020:14.8,optimal:15.0,sens:1.1,tier:1,est:false,
+   grapes:["Pinot Noir","Chardonnay"],risks:["bushfire smoke"],
+   desc:"Australia's cool-climate refuge. Sparkling and Pinot prospects strengthen as the mainland heats — a standout long-term winner.",
+   adapt:"Already a magnet for mainland producer investment. Coal River, Tamar, and Derwent expanding fastest."},
+
+  // ===== NEW ZEALAND =====
+  {name:"Marlborough",country:"New Zealand",lat:-41.5,lng:173.9,gst2020:15.4,optimal:15.5,sens:1.05,tier:1,est:false,
+   grapes:["Sauvignon Blanc"],risks:["aromatic loss"],
+   desc:"Cool maritime, near-ideal GST for Sauvignon — but the signature methoxypyrazine zing is temperature-sensitive and already shifting.",
+   adapt:"Earlier picking; Awatere Valley's cooler sites hold up best. Style may move toward riper, fruitier profile."},
+  {name:"Central Otago",country:"New Zealand",lat:-45.05,lng:169.2,gst2020:14.8,optimal:15.5,sens:1.15,tier:1,est:true,
+   grapes:["Pinot Noir"],risks:["spring frost","drought"],
+   desc:"The world's southernmost serious Pinot region — high-altitude continental at 45°S. Recent warm vintages have been excellent.",
+   adapt:"Frost protection is the year-round operational task; further warming may finally retire it as a vintage risk."},
+  {name:"Hawke's Bay",country:"New Zealand",lat:-39.6,lng:176.85,gst2020:17.2,optimal:17.0,sens:1.05,tier:1,est:true,
+   grapes:["Syrah","Cabernet Sauvignon","Merlot","Chardonnay"],risks:["cyclone","autumn rain"],
+   desc:"New Zealand's warmest mainstream region. Gimblett Gravels sub-zone has emerged as the structural premium-red site.",
+   adapt:"Cyclone risk (Cyclone Gabrielle, 2023) is acute and worsening; varietal diversification across more sites accelerating."},
+  {name:"Martinborough",country:"New Zealand",lat:-41.22,lng:175.45,gst2020:15.8,optimal:15.8,sens:1.1,tier:2,est:true,
+   grapes:["Pinot Noir","Sauvignon Blanc"],risks:["spring frost","drought"],
+   desc:"Cool, dry Wairarapa sub-region at the southern tip of the North Island. Highly regarded for tightly structured Pinot Noir.",
+   adapt:"Compact regional footprint; quality identity continues to strengthen even as growing-season warmth shifts."},
+  {name:"Waiheke Island",country:"New Zealand",lat:-36.8,lng:175.1,gst2020:17.0,optimal:17.0,sens:1.0,tier:2,est:true,
+   grapes:["Cabernet Sauvignon","Syrah","Chardonnay"],risks:["autumn rain","cyclone"],
+   desc:"Maritime Auckland island, Bordeaux-style blends. Sea moderation makes for a warmer-but-balanced viticultural climate.",
+   adapt:"Sea-breeze cooling is a structural advantage; Mediterranean varieties (Montepulciano) increasingly common."},
+
+  // ===== EAST ASIA =====
+  {name:"Hokkaido",country:"Japan",lat:43.1,lng:141.3,gst2020:14.6,optimal:15.4,sens:1.2,tier:1,est:false,
+   grapes:["Pinot Noir","Kerner"],risks:["snow load","spring frost"],
+   desc:"Japan's cool-climate frontier. Currently cold-marginal but warming fast — Pinot Noir and aromatic whites increasingly credible.",
+   adapt:"Yoichi and Sorachi sub-regions lead. Producer migration from warmer Honshu accelerating."},
+  {name:"Yamanashi (Koshu)",country:"Japan",lat:35.66,lng:138.6,gst2020:18.2,optimal:17.5,sens:1.1,tier:1,est:true,
+   grapes:["Koshu","Muscat Bailey A"],risks:["humidity","typhoons"],
+   desc:"Japan's largest wine prefecture, west of Tokyo. Koshu — an indigenous thick-skinned white — handles humid summers better than vinifera.",
+   adapt:"Pergola training and disease-resistant indigenous grapes remain structurally adaptive; bottle aging programs growing."},
+  {name:"Nagano",country:"Japan",lat:36.65,lng:138.2,gst2020:16.5,optimal:16.5,sens:1.15,tier:2,est:true,
+   grapes:["Chardonnay","Merlot"],risks:["typhoons","humidity"],
+   desc:"Elevated central-Honshu prefecture. Higher-altitude plantings near Shiojiri and Tomi are increasingly producing international-style wines.",
+   adapt:"Altitude-driven cool-night ripening; producers anticipate widening varietal options as warming continues."},
+  {name:"Ningxia",country:"China",lat:38.5,lng:106.2,gst2020:18.4,optimal:17.5,sens:1.15,tier:1,est:false,
+   grapes:["Cabernet Sauvignon","Marselan"],risks:["winter freeze","aridity"],
+   desc:"China's flagship fine-wine region at the edge of the Gobi. Massive investment, but vines must still be buried each winter against extreme cold.",
+   adapt:"Warmer winters reduce burial losses — a near-term plus. Long-term, Yellow River water allocation is the binding constraint."},
+  {name:"Shandong (Yantai)",country:"China",lat:37.5,lng:121.4,gst2020:18.5,optimal:17.5,sens:1.1,tier:2,est:true,
+   grapes:["Cabernet Sauvignon","Chardonnay"],risks:["humidity","typhoons"],
+   desc:"Bohai Sea coastal hills, China's oldest wine region. Maritime humidity and disease pressure are the structural constraints.",
+   adapt:"Hill-side plantings and improved canopy management; producers experiment with humidity-tolerant grapes."},
+  {name:"Yunnan (Shangri-La)",country:"China",lat:28.0,lng:99.7,gst2020:16.5,optimal:16.5,sens:1.1,tier:2,est:true,
+   grapes:["Cabernet Sauvignon","Chardonnay"],risks:["monsoon","altitude effects"],
+   desc:"High-altitude Tibetan plateau foothills (2200–2900 m). Combines tropical latitude with extreme elevation — a unique viticultural climate.",
+   adapt:"Extreme-altitude vineyards mostly insulated from low-elevation warming; monsoon-rain timing the operational variable."},
+
+  // ===== SOUTH ASIA & MISC =====
+  {name:"Nashik (Maharashtra)",country:"India",lat:20.0,lng:73.78,gst2020:24.0,optimal:18.5,sens:1.0,tier:2,est:true,
+   grapes:["Cabernet Sauvignon","Chenin Blanc","Sauvignon Blanc"],risks:["monsoon","extreme heat"],
+   desc:"Tropical Indian wine region at altitude (600 m). The climate is structurally challenging — already past comfortable ripening temperatures.",
+   adapt:"Producers experiment with harvest timing to dodge monsoon; the long-term viability depends on heat-tolerant variety development."},
+];
+
+const SIGMA=1.2;                         // °C tolerance band (Gaussian, ~Jones climate-maturity groups)
+const slider=document.getElementById('slider');
+const yearEl=document.getElementById('year');
+const scenarioEl=document.getElementById('scenario');
+
+// warming vs. 2020 baseline. total2100 is the endpoint delta vs. 2020.
+// Pre-2020: ~0.18°C/decade historical. Post-2020: monotonic accelerating
+// for current-policy / high-emissions, or peak-and-decline for Paris-aligned.
+function globalDelta(year,total2100){
+  if(year<=2020) return (year-2020)*0.018;
+  const f=(year-2020)/(2100-2020);
+  if(total2100<0.5){                                  // Paris-aligned: overshoot then decline
+    const peak=0.8, peakF=0.45;                       // peak ~+0.8°C around 2056
+    if(f<=peakF) return peak*(f/peakF);
+    const g=(f-peakF)/(1-peakF);
+    return peak+(total2100-peak)*g;
+  }
+  return total2100*(f*0.6+f*f*0.4);                   // accelerating curve
+}
+function gstFor(r,year,scen){ return r.gst2020 + globalDelta(year,scen)*r.sens; }
+function score(r,year,scen){
+  const d=gstFor(r,year,scen)-r.optimal;
+  return Math.max(0,Math.min(100, 100*Math.exp(-(d*d)/(2*SIGMA*SIGMA)) ));
+}
+function colorFor(s){return s>=75?'#2e9e5b':s>=50?'#d9a441':s>=25?'#d9722e':'#b03a4e';}
+
+const map=L.map('map',{worldCopyJump:true,minZoom:2,maxZoom:9}).setView([35,5],2);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
+  attribution:'&copy; OpenStreetMap &copy; CARTO',subdomains:'abcd',maxZoom:10
+}).addTo(map);
+
+// Tier reveal: 1 = world flagships, 2 = country-level majors, 3 = sub-AVAs / crus
+const TIER_MIN_ZOOM={1:0,2:4,3:6};
+function visibleAtZoom(r,z){return z>=TIER_MIN_ZOOM[r.tier||1];}
+
+regions.forEach(r=>{
+  r.marker=L.circleMarker([r.lat,r.lng],{
+    weight:r.est?1.2:1.5,color:'#fff',fillOpacity:.85,
+    dashArray:r.est?'3,3':null
+  }).on('click',()=>showDetail(r));
+  const lbl=r.region?`${r.name} <span style="opacity:.65;font-size:.85em">${r.region}</span>`:r.name;
+  r.marker.bindTooltip(lbl,{direction:'top'});
+});
+
+function syncMarkers(){
+  const z=map.getZoom();
+  regions.forEach(r=>{
+    const v=visibleAtZoom(r,z), on=map.hasLayer(r.marker);
+    if(v&&!on) r.marker.addTo(map);
+    else if(!v&&on) map.removeLayer(r.marker);
+  });
+}
+map.on('zoomend',()=>{syncMarkers();render();});
+
+function spark(r,scen){
+  const pts=[];
+  for(let y=1980;y<=2080;y+=5) pts.push([y,score(r,y,scen)]);
+  const W=300,H=70,minY=1980,maxY=2080;
+  const X=y=>(y-minY)/(maxY-minY)*(W-8)+4;
+  const Y=s=>H-6-(s/100)*(H-12);
+  const line=pts.map((p,i)=>(i?'L':'M')+X(p[0]).toFixed(1)+' '+Y(p[1]).toFixed(1)).join(' ');
+  const cur=+slider.value, cx=X(cur), cs=score(r,cur,scen);
+  return `<rect x="0" y="0" width="${W}" height="${H}" fill="#140d10" rx="4"/>
+    <line x1="4" y1="${Y(75)}" x2="${W-4}" y2="${Y(75)}" stroke="#2e9e5b" stroke-dasharray="2 3" opacity=".4"/>
+    <line x1="4" y1="${Y(50)}" x2="${W-4}" y2="${Y(50)}" stroke="#d9a441" stroke-dasharray="2 3" opacity=".4"/>
+    <path d="${line}" fill="none" stroke="#d9a441" stroke-width="2"/>
+    <line x1="${cx}" y1="4" x2="${cx}" y2="${H-4}" stroke="#f3e7d8" opacity=".5"/>
+    <circle cx="${cx}" cy="${Y(cs)}" r="3.5" fill="${colorFor(cs)}" stroke="#fff"/>`;
+}
+
+let selected=null;
+function showDetail(r){
+  selected=r;
+  const scen=parseFloat(scenarioEl.value), y=+slider.value;
+  const s=score(r,y,scen), s2080=score(r,2080,scen), s2020=score(r,2020,scen);
+  document.getElementById('empty').style.display='none';
+  document.getElementById('detail').style.display='block';
+  document.getElementById('d-name').textContent=r.name;
+  document.getElementById('d-country').textContent=r.country;
+  const se=document.getElementById('d-score');
+  se.textContent=s.toFixed(0); se.style.color=colorFor(s);
+  const diff=s2080-s2020, t=document.getElementById('d-trend');
+  if(diff>8){t.innerHTML='&#9650; Climate winner';t.style.background='#1d4d31';}
+  else if(diff<-8){t.innerHTML='&#9660; At growing risk';t.style.background='#5a1f2a';}
+  else {t.innerHTML='&#8596; Holding steady';t.style.background='#4a3a1c';}
+  document.getElementById('d-grapes').innerHTML=r.grapes.map(g=>`<span class="tag">${g}</span>`).join('');
+  document.getElementById('d-risks').innerHTML=(r.risks||[]).map(x=>`<span class="risk">${x}</span>`).join('');
+  document.getElementById('d-desc').textContent=r.desc;
+  const adaptEl=document.getElementById('d-adapt');
+  if(r.adapt){adaptEl.style.display='block';adaptEl.innerHTML='<b>Adaptation outlook</b>'+r.adapt;}
+  else {adaptEl.style.display='none';}
+  document.getElementById('d-spark').innerHTML=spark(r,scen);
+  document.getElementById('d-gst').textContent=gstFor(r,y,scen).toFixed(1)+' °C';
+  document.getElementById('d-opt').textContent=r.optimal.toFixed(1)+' °C';
+  document.getElementById('d-out').textContent=(diff>=0?'+':'')+diff.toFixed(0)+' pts by 2080';
+}
+
+function render(){
+  const scen=parseFloat(scenarioEl.value), y=+slider.value, z=map.getZoom();
+  yearEl.textContent=y;
+  document.getElementById('ystar').textContent='in '+y;
+  const visible=regions.filter(r=>visibleAtZoom(r,z));
+  // marker radius shrinks slightly at deep zoom so sub-AVAs don't pile up
+  const rScale=z>=6?0.65:z>=4?0.85:1;
+  regions.forEach(r=>{
+    const s=score(r,y,scen);
+    r._s=s;
+    r.marker.setStyle({fillColor:colorFor(s)});
+    r.marker.setRadius((4+s/100*11)*rScale);
+  });
+  const N=z>=6?12:z>=4?10:8;
+  const risers=[...visible].sort((a,b)=>(score(b,2080,scen)-score(b,2020,scen))-(score(a,2080,scen)-score(a,2020,scen))).slice(0,N);
+  const fallers=[...visible].sort((a,b)=>(score(a,2080,scen)-score(a,2020,scen))-(score(b,2080,scen)-score(b,2020,scen))).slice(0,N);
+  const li=(r)=>{const d=score(r,2080,scen)-score(r,2020,scen);
+    const where=r.region?`${r.name} <span style="opacity:.6;font-size:.85em">${r.region}</span>`:`${r.name}, ${r.country}`;
+    return `<div class="li" data-n="${r.name}"><span>${where}</span>
+      <span class="v" style="color:${colorFor(r._s)}">${(d>=0?'+':'')+d.toFixed(0)}</span></div>`;};
+  document.getElementById('risers').innerHTML=risers.map(li).join('');
+  document.getElementById('fallers').innerHTML=fallers.map(li).join('');
+  document.querySelectorAll('.li').forEach(el=>el.onclick=()=>{
+    const r=regions.find(x=>x.name===el.dataset.n);
+    map.setView([r.lat,r.lng],Math.max(map.getZoom(),5)); showDetail(r);
+  });
+  if(selected) showDetail(selected);
+}
+
+slider.addEventListener('input',render);
+scenarioEl.addEventListener('change',render);
+
+let playing=null;
+document.getElementById('play').addEventListener('click',e=>{
+  if(playing){clearInterval(playing);playing=null;e.target.innerHTML='&#9658; Play';return;}
+  e.target.innerHTML='&#10073;&#10073; Pause';
+  playing=setInterval(()=>{
+    let v=+slider.value+5;
+    if(v>2080){v=1980;}
+    slider.value=v;render();
+  },650);
+});
+
+syncMarkers();
+render();
+</script>
+</body>
+</html>
